@@ -761,7 +761,7 @@ TEST_F(VSyncDispatchTimerQueueTest, laggedTimerGroupsCallbacksWithinLag) {
     EXPECT_CALL(mStubTracker, nextAnticipatedVSyncTimeFrom(1000))
             .InSequence(seq)
             .WillOnce(Return(1000));
-    EXPECT_CALL(mMockClock, alarmIn(_, 600)).InSequence(seq);
+    EXPECT_CALL(mMockClock, alarmAt(_, 600)).InSequence(seq);
     EXPECT_CALL(mStubTracker, nextAnticipatedVSyncTimeFrom(1000))
             .InSequence(seq)
             .WillOnce(Return(1000));
