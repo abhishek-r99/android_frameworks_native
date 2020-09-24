@@ -126,6 +126,7 @@
 #include "TimeStats/TimeStats.h"
 #include "android-base/parseint.h"
 #include "android-base/stringprintf.h"
+#include "gralloc_priv.h"
 
 #if __has_include("QtiGralloc.h")
 #include "QtiGralloc.h"
@@ -285,6 +286,7 @@ ui::PixelFormat SurfaceFlinger::defaultCompositionPixelFormat = ui::PixelFormat:
 Dataspace SurfaceFlinger::wideColorGamutCompositionDataspace = Dataspace::V0_SRGB;
 ui::PixelFormat SurfaceFlinger::wideColorGamutCompositionPixelFormat = ui::PixelFormat::RGBA_8888;
 bool SurfaceFlinger::useFrameRateApi;
+bool SurfaceFlinger::sDirectStreaming;
 
 std::string getHwcServiceName() {
     char value[PROPERTY_VALUE_MAX] = {};
@@ -2583,6 +2585,7 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
                                          const DisplayDeviceState& state) {
     int width = 0;
     int height = 0;
+    bool canAllocateHwcForVDS = false;
     ui::PixelFormat pixelFormat = static_cast<ui::PixelFormat>(PIXEL_FORMAT_UNKNOWN);
     if (state.physical) {
         const auto& activeConfig =
@@ -2599,6 +2602,19 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         status = state.surface->query(NATIVE_WINDOW_FORMAT, &intPixelFormat);
         ALOGE_IF(status != NO_ERROR, "Unable to query format (%d)", status);
         pixelFormat = static_cast<ui::PixelFormat>(intPixelFormat);
+        if (mUseHwcVirtualDisplays || getHwComposer().isUsingVrComposer()) {
+            if (maxVirtualDisplaySize == 0 ||
+                ((uint64_t)width <= maxVirtualDisplaySize &&
+                (uint64_t)height <= maxVirtualDisplaySize)) {
+                uint64_t usage = 0;
+                // Replace with native_window_get_consumer_usage ?
+                status = state .surface->getConsumerUsage(&usage);
+                ALOGW_IF(status != NO_ERROR, "Unable to query usage (%d)", status);
+                if ((status == NO_ERROR) && canAllocateHwcDisplayIdForVDS(usage)) {
+                   canAllocateHwcForVDS = true;
+               }
+            }
+        }
     } else {
         // Virtual displays without a surface are dormant:
         // they have external state (layer stack, projection,
